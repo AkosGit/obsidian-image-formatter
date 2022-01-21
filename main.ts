@@ -1,46 +1,55 @@
 import {
 	App,
-	Editor,
-	FileSystemAdapter,
-	MarkdownRenderer,
 	MarkdownView,
-	Modal,
-	Notice,
 	Plugin,
 	PluginSettingTab,
 	Setting
 } from 'obsidian';
-import * as path from "path";
-import GetImages, {Embed, ExportWithImages, Imgurl, WriteToFile} from "./ExportWithImages";
+import {ExportWithImages} from "./ExportWithImages";
+import {ImportWithFiles} from "./ImportWithFiles";
 
-
-
-export interface MdExportSettings {
+export interface MdImportExportSettings {
 	img_embed: boolean,
-	clientId:string | null
+	clientId:string | null,
+	file_folder: string
 }
 
-const DEFAULT_SETTINGS: MdExportSettings = {
+const DEFAULT_SETTINGS: MdImportExportSettings = {
 	img_embed: false,
-	clientId: null
+	clientId: "",
+	file_folder:""
 }
 
-export default class MdExportPlugin extends Plugin {
-	settings: MdExportSettings;
+export default class MdImportExportPlugin extends Plugin {
+	settings: MdImportExportSettings;
 
 	async onload() {
 		await this.loadSettings();
-
 		// This adds a complex command that can check whether the current state of the app allows execution of the command
 		this.addCommand({
 			id: 'Export',
-			name: 'Export document to MD',
+			name: 'Export markdown with images',
 			checkCallback: (checking: boolean) => {
 				// Conditions to check
 				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
 				if (markdownView) {
 					if (!checking) {
 						new ExportWithImages(this.app,this.settings,markdownView)
+					}
+					// This command will only show up in Command Palette when the check function returns true
+				}
+				return true;
+			}
+		});
+		this.addCommand({
+			id: 'Import',
+			name: 'Import with downloaded files',
+			checkCallback: (checking: boolean) => {
+				// Conditions to check
+				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
+				if (markdownView) {
+					if (!checking) {
+						new ImportWithFiles(this.app,this.settings,markdownView)
 					}
 					// This command will only show up in Command Palette when the check function returns true
 				}
@@ -61,7 +70,6 @@ export default class MdExportPlugin extends Plugin {
 		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
 	}
 
-
 	onunload() {
 
 	}
@@ -76,20 +84,18 @@ export default class MdExportPlugin extends Plugin {
 }
 
 class SampleSettingTab extends PluginSettingTab {
-	plugin: MdExportPlugin;
-
-	constructor(app: App, plugin: MdExportPlugin) {
+	plugin: MdImportExportPlugin;
+	constructor(app: App, plugin: MdImportExportPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}
-
 	display(): void {
 		const {containerEl} = this;
 		containerEl.empty();
-		containerEl.createEl('h2', {text: 'Settings for md export plugin'});
+		containerEl.createEl('h2', {text: 'Settings for Markdown exporter/importer plugin'});
 		new Setting(containerEl)
-			.setName('WARNING: this will result in very slow render times\nUse embedded images')
-			.setDesc('If turned on, in the exported file the images will be embedded in base64 else they will be uploaded to ImgUrl')
+			.setName('Use embedded images')
+			.setDesc('WARNING: this will result in very slow render times! If turned on, in the exported images will be embedded in base64.')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.img_embed)
 				.onChange(async (value: boolean) => {
@@ -97,13 +103,23 @@ class SampleSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				}));
 		new Setting(containerEl)
-			.setName("Client id for ImgUrl")
+			.setName("Client id for Imgur")
 			.setDesc("You need to create an account and register an app here: https://api.imgur.com/oauth2/addclient")
 			.addText(text => text
 				.setPlaceholder('xxxxxxxxxxxxxxx')
 				.setValue(this.plugin.settings.clientId)
 				.onChange(async (value: string) => {
 					this.plugin.settings.clientId = value;
+					await this.plugin.saveSettings();
+				}));
+		new Setting(containerEl)
+			.setName("imported image folder path")
+			.setDesc("This is where imported images will be saved")
+			.addText(text => text
+				.setPlaceholder("first_folder_in_vault/second_folder")
+				.setValue(this.plugin.settings.file_folder)
+				.onChange(async (value: string) => {
+					this.plugin.settings.file_folder = value;
 					await this.plugin.saveSettings();
 				}));
 	}

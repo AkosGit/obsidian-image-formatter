@@ -1,26 +1,23 @@
-import {App, MarkdownRenderer, MarkdownView, Notice, TFile, View} from "obsidian";
-import * as path from "path";
-import MdExportPlugin, {MdExportSettings} from "./main";
-import * as buffer from "buffer";
+import {App, MarkdownView, Notice, TFile} from "obsidian";
+import {MdImportExportSettings} from "./main";
 import * as fs from "fs";
-
 
 export class ExportWithImages {
 	App:App;
 	View:MarkdownView
 	ImageExtensions: Set<string> = new Set(['jpeg', 'jpg', 'png','svg', 'bmp']);
-	Regex= new RegExp("!\\[\\[(.*)\\]\\]|!\\[.*\\]\\((.*)\\)","g");
-	Settings:MdExportSettings;
+	Regex= new RegExp("!\\[\\[(.*)\\]\\]|!\\[.*\\]\\((\\S*)+?\\)|!\\[.*\\]\\((\\S*)+? ","g");
+	Settings:MdImportExportSettings;
 	Md:string;
 	index:number;
-	constructor(app:App,settings:MdExportSettings,view:MarkdownView) {
+	constructor(app:App,settings:MdImportExportSettings,view:MarkdownView) {
 		this.View=view;
 		this.Settings=settings;
 		this.App=app;
 		this.Md=view.data;
 		this.index=0;
-		if(!settings.img_embed && settings.clientId==null){
-			new Notice("Please provide a client id for ImgUrl")
+		if(!settings.img_embed && settings.clientId==""){
+			new Notice("Please provide a client id for Imgur")
 		}
 		else {
 			const files :Array<TFile> = this.getImageFiles(this.GetDocImages());
@@ -30,7 +27,8 @@ export class ExportWithImages {
 	GetDocImages ():Array<string>
 	{
 		let matches: string[];
-		let docimgs:Array<string>= [];
+		const docimgs:Array<string>= [];
+		// eslint-disable-next-line no-cond-assign
 		while (matches = this.Regex.exec(this.Md)) {//getting all atachments in doc
 			this.ImageExtensions.forEach((ext: string) =>{
 				if(matches[1].endsWith(ext)){//if its an image
@@ -45,7 +43,7 @@ export class ExportWithImages {
 	getImageFiles(docImgs: Array<string>):Array<TFile>
 	{
 		const allFiles: TFile[] = this.App.vault.getFiles();
-		let images: Array<TFile> = new Array<TFile>();
+		const images: Array<TFile> = new Array<TFile>();
 		for (let i = 0; i < allFiles.length; i++) {
 			if (this.ImageExtensions.has(allFiles[i].extension.toLowerCase())) {
 				const filename:string =allFiles[i].basename+"."+allFiles[i].extension
@@ -59,7 +57,7 @@ export class ExportWithImages {
 	processImages(files:Array<TFile>){
 		files.forEach(
 			async (file:TFile) =>{
-				let buf:ArrayBuffer= await this.App.vault.readBinary(file)
+				const buf:ArrayBuffer= await this.App.vault.readBinary(file)
 				if(this.Settings.img_embed){
 					this.Embed(buf,file.name,files.length)
 				}
@@ -68,7 +66,6 @@ export class ExportWithImages {
 				}
 			}
 		)
-		this.WriteToFile();
 	}
 	replaceImage(oldN:string,newN:string,nfiles:number){
 		console.log(oldN)
@@ -87,8 +84,8 @@ export class ExportWithImages {
 	//from https://stackoverflow.com/questions/9267899/arraybuffer-to-base64-encoded-string
 	arrayBufferToBase64( buffer : ArrayBuffer) {
 		let binary = '';
-		let bytes = new Uint8Array( buffer );
-		let len = bytes.byteLength;
+		const bytes = new Uint8Array( buffer );
+		const len = bytes.byteLength;
 		for (let i = 0; i < len; i++) {
 			binary += String.fromCharCode( bytes[ i ] );
 		}
@@ -111,17 +108,20 @@ export class ExportWithImages {
 		xhr.open("POST", UPLOAD_URL);
 		// Send authentication headers.
 		xhr.setRequestHeader("Authorization", "Client-ID " + this.Settings.clientId);
+		xhr.onerror = function () {
+			new Notice("Image upload failed, export failed!")
+		};
 		// Send form data
 		xhr.send(fd);
 	}
 	WriteToFile(){
 		console.log(this.Md);
 		// @ts-ignore
-		let bpath=this.App.vault.adapter.basePath;
+		const bpath=this.App.vault.adapter.basePath;
 		const path=bpath+"/"+this.View.file.parent.path+"/"+this.View.file.basename+"_exported.md"
 		fs.writeFile(path, this.Md, function (err) {
 			if(err){
-				new Notice("Export has failed!")
+				new Notice("Export,has failed,can't write to file")
 			}
 			else{
 				new Notice("Export was successful!")
